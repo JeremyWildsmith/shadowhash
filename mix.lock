@@ -1,0 +1,10 @@
+%{
+  "bcrypt": {:hex, :bcrypt, "1.2.2", "99904dd4a0df4e8454293e630f2c895a599a616304838468540402fececd11ed", [:rebar3], [{:poolboy, "1.5.2", [hex: :poolboy, repo: "hexpm", optional: false]}], "hexpm", "6428d68bb2608490e150be406a7ab75b5bce4a2b5a3b0c3f36a12e367a141561"},
+  "bcrypt_elixir": {:hex, :bcrypt_elixir, "3.2.0", "feab711974beba4cb348147170346fe097eea2e840db4e012a145e180ed4ab75", [:make, :mix], [{:comeonin, "~> 5.3", [hex: :comeonin, repo: "hexpm", optional: false]}, {:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}], "hexpm", "563e92a6c77d667b19c5f4ba17ab6d440a085696bdf4c68b9b0f5b30bc5422b8"},
+  "comeonin": {:hex, :comeonin, "5.5.0", "364d00df52545c44a139bad919d7eacb55abf39e86565878e17cebb787977368", [:mix], [], "hexpm", "6287fc3ba0aad34883cbe3f7949fc1d1e738e5ccdce77165bc99490aa69f47fb"},
+  "crypt3": {:hex, :crypt3, "1.0.4", "ce5ee4b2b16f9eea7b1793ff73bce987c5f4043118ea384a9f5ee910a4793b32", [:make, :mix], [], "hexpm", "e5cbd63d4b720e323ed0dd5ac647254bc9f3ac250b87da29d27ea9cbef31df37"},
+  "elixir_make": {:hex, :elixir_make, "0.8.4", "4960a03ce79081dee8fe119d80ad372c4e7badb84c493cc75983f9d3bc8bde0f", [:mix], [{:castore, "~> 0.1 or ~> 1.0", [hex: :castore, repo: "hexpm", optional: true]}, {:certifi, "~> 2.0", [hex: :certifi, repo: "hexpm", optional: true]}], "hexpm", "6e7f1d619b5f61dfabd0a20aa268e575572b542ac31723293a4c1a567d5ef040"},
+  "erlexec": {:hex, :erlexec, "2.0.7", "76d0bc7487929741b5bb9f74da2af5daf1492134733cf9a05c7aaa278b6934c5", [:rebar3], [], "hexpm", "af2dd940bb8e32f5aa40a65cb455dcaa18f5334fd3507e9bfd14a021e9630897"},
+  "exexec": {:hex, :exexec, "0.2.0", "a6ffc48cba3ac9420891b847e4dc7120692fb8c08c9e82220ebddc0bb8d96103", [:mix], [{:erlexec, "~> 1.10", [hex: :erlexec, repo: "hexpm", optional: false]}], "hexpm", "312cd1c9befba9e078e57f3541e4f4257eabda6eb9c348154fe899d6ac633299"},
+  "poolboy": {:hex, :poolboy, "1.5.2", "392b007a1693a64540cead79830443abf5762f5d30cf50bc95cb2c1aaafa006b", [:rebar3], [], "hexpm", "dad79704ce5440f3d5a3681c8590b9dc25d1a561e8f5a9c995281012860901e3"},
+}
