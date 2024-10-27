@@ -22,7 +22,9 @@ defmodule ShadowHash.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:erlexec, "~> 2.0", runtime: false}
+      {:erlexec, "~> 2.0", runtime: false},
+      {:nx, "~> 0.9.1"},
+      {:exla, "~> 0.9.1"}
     ]
   end
 end

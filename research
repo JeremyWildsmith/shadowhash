@@ -1,0 +1,21 @@
+salt=cobKo5Ks
+decoded=7286caa392ac
+bytes([0x72, 0x86, 0xca, 0xa3, 0x92, 0xac])
+passlib.hash.md5_crypt.hash(
+    "tp",
+    salt=bytes([0x72, 0x86, 0xca, 0xa3, 0x92, 0xac])
+)
+
+hash=RbB0fGCC2BvollDSnOS9p1
+decoded=45b0747c6082d81be89650d29ce4bda7
+
+
+https://www.vidarholen.net/contents/blog/?p=32
+
+
+sudo apt-get install libcudnn9-cuda-11
+
+
+VERY IMPORTANT BEFORE BUILD:
+export XLA_TARGET=cuda12
+mix deps.compile

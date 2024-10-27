@@ -1,4 +1,5 @@
 defmodule ShadowHash.Shadow do
+  require Logger
   alias ShadowHash.Hash
   alias ShadowHash.PasswordParse
   alias ShadowHash.ShadowParse
@@ -30,6 +31,7 @@ defmodule ShadowHash.Shadow do
     IO.puts(" --all-chars   : Will also bruteforce with non-printable characters")
     IO.puts(" --dictionary  : Supply a dictionary of passwords that are attempted initially")
     IO.puts(" --non-worker  : Do not spin up workers to process bruteforce requests")
+    IO.puts(" --verbose     : Print verbose logging")
   end
 
   def process(%{
@@ -37,17 +39,25 @@ defmodule ShadowHash.Shadow do
         user: user,
         dictionary: dictionary,
         all_chars: all_chars,
-        non_worker: non_worker
+        non_worker: non_worker,
+        verbose: verbose
       }) do
+
+    unless verbose do
+      Logger.configure([level: :none])
+    end
+
     ErlexecBootstrap.prepare_port()
     BruteforceJobServer.start_link()
 
     workers =
-      if non_worker do
-        []
-      else
+      unless non_worker do
+        # :erlang.system_info(:logical_processors_available)
         1..:erlang.system_info(:logical_processors_available)
-        |> Enum.map(BruteforceClient.start_link())
+        |> Enum.map(fn _ -> BruteforceClient.start_link end)
+      else
+        IO.puts("!!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs.")
+        []
       end
 
     process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
@@ -103,6 +113,7 @@ defmodule ShadowHash.Shadow do
   end
 
   def crack(algo, hash, dictionary, charset) do
+    Logger.info("Submitting bruteforce job to job server.")
     BruteforceJobServer.submit_job(self())
 
     jobs = [
@@ -110,9 +121,13 @@ defmodule ShadowHash.Shadow do
       %BruteforceJob{begin: 0, last: :inf, charset: charset}
     ]
 
-    JobScheduler.schedule(jobs, algo, hash)
+    Logger.info("Starting job scheduler...")
+    {:ok, plaintext} = JobScheduler.schedule(jobs, algo, hash)
 
+    Logger.info("Dismissing bruteforce job from job server.")
     BruteforceJobServer.dismiss_job(self())
+
+    plaintext
   end
 
   def crack_old(algo, hash, dictionary, charset) do

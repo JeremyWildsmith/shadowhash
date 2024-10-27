@@ -2,7 +2,7 @@ defmodule ShadowHash.Job.BruteforceJobServer do
   use GenServer
 
   def start_link() do
-    GenServer.start_link(__MODULE__, nil, name: {:global, :bruteforce_job_server})
+    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
     |> case do
       {:error, {:already_started, _}} -> :ok
       {:error, _} -> raise "Error occurred starting link!"

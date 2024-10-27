@@ -1,4 +1,6 @@
 defmodule ShadowHash.Job.BruteforceClient do
+  require Logger
+
   alias ShadowHash.Job.BruteforceJobServer
   alias ShadowHash.Job.JobScheduler
   alias ShadowHash.Job.DictionaryJob
@@ -7,15 +9,19 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.Hash
 
   def start_link() do
+    Logger.info("* Bruteforce Client Starting")
     spawn(__MODULE__, :process, [])
   end
 
   def process() do
     receive do
-      :shutdown -> nil
+      :shutdown ->
+        Logger.info("Bruteforce client shutting down per request.")
+        nil
     after
       200 ->
         with scheduler when not is_nil(scheduler) <- BruteforceJobServer.enlist() do
+          Logger.info("Bruteforce client assigned to scheduler.")
           process_job(scheduler)
         end
 
@@ -31,9 +37,13 @@ defmodule ShadowHash.Job.BruteforceClient do
     JobScheduler.process(scheduler, &handle_job/3)
   end
 
-  defp crack(stream, algo, hash) do
+  defp generate_hashes(stream, algo) do
     stream
     |> Stream.map(&{Hash.generate(algo, &1), &1})
+  end
+
+  defp crack(stream, algo, hash) do
+    generate_hashes(stream, algo)
     |> Stream.filter(fn {cipher, _} -> cipher === hash end)
     |> Stream.map(fn {_, plain} -> plain end)
     |> Enum.take(1)
