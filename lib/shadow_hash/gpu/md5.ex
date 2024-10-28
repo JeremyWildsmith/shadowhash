@@ -220,7 +220,6 @@ defmodule ShadowHash.Gpu.Md5 do
     f = md5_round_compute_f(i, abcd)
     g = md5_round_compute_g(i)
 
-    # Nx.slice(m32b, [g], [1])
     f =
       m32b[g]
       |> Nx.add(abcd[0])
@@ -312,9 +311,7 @@ defmodule ShadowHash.Gpu.Md5 do
     |> Nx.add(initial_abcd)
   end
 
-  defn pad_message(m32b) do
-  end
-
+  # Can significantly optimize in the future by replacing the shift loop with pre-computed shift tensors
   defn md5_of(m32b) do
     abcd =
       Nx.tensor(

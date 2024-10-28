@@ -96,83 +96,12 @@ defmodule ShadowHash.Gpu.Md5crypt do
     |> Nx.pad(0, [{0, @max_message_size_bytes - @max_str_size + 1, 0}])
   end
 
-  defn(shift_tensor_right(t, a), do: shift_tensor(t, a, shift_right_t()))
-
-  defn(shift_tensor_right_pin_head(t, a), do: shift_tensor(t, a, shift_right_pin_head_t()))
-
-  defn(shift_tensor_left(t, a), do: shift_tensor(t, a, shift_left_t()))
-
-  defn shift_tensor(t, a, mapping) do
-    [shift_tensor, _] = Nx.broadcast_vectors([mapping, a])
-
-    m32_shape =
-      a
-      |> Nx.devectorize(keep_names: false)
-      |> Nx.reduce_max()
-
-    {_, _, _, _, r} =
-      while {x = 0, shift_tensor, m32_shape, a, t}, Nx.less(x, m32_shape) do
-        choice_factor = Nx.min(1, Nx.max(0, Nx.subtract(a, x)))
-
-        t =
-          Nx.add(
-            Nx.multiply(Nx.take(t, shift_tensor), choice_factor),
-            Nx.multiply(t, 1 - choice_factor)
-          )
-          |> Nx.as_type({:u, 8})
-
-        {x + 1, shift_tensor, m32_shape, a, t}
-      end
-
-    r
-  end
-
-  # Todo: eliminate code duplication
-  # defn shift_message_tensor(t, a, mapping) do
-  #  [shift_tensor, _] = Nx.broadcast_vectors([mapping, a])
-  #
-  #  m32_shape =
-  #    a
-  #    |> Nx.devectorize(keep_names: false)
-  #    |> Nx.reduce_max()
-  #
-  #  {_, _, _, _, r} =
-  #    while {x = 0, shift_tensor, m32_shape, a, t}, Nx.less(x, m32_shape) do
-  #      choice_factor = Nx.min(1, Nx.max(0, Nx.subtract(a, x)))
-  #
-  #      t =
-  #        Nx.add(
-  #          Nx.multiply(Nx.take(t, shift_tensor), choice_factor),
-  #          Nx.multiply(t, 1 - choice_factor)
-  #        )
-  #        |> Nx.as_type({:u, 32})
-  #
-  #      {x + 1, shift_tensor, m32_shape, a, t}
-  #    end
-  #
-  #  r
-  # end
-
   defn concat(a, b) do
     a_len = a[0]
 
     b
     |> Nx.as_type({:u, 8})
     |> Nx.take(right_shift_vectors()[a_len])
-    |> Nx.add(a)
-  end
-
-  defn concat_length(a) do
-    a_len = a[0]
-
-    total_len =
-      a_len
-      |> Nx.add(1)
-
-    Nx.concatenate([Nx.tensor([1]), a_len])
-    |> Nx.pad(0, [{0, @max_str_size - 2, 0}])
-    |> Nx.as_type({:u, 8})
-    |> shift_tensor_right_pin_head(a_len)
     |> Nx.add(a)
   end
 
@@ -237,28 +166,6 @@ defmodule ShadowHash.Gpu.Md5crypt do
     Nx.concatenate([total_effective_len, encoded])
   end
 
-  # defp build_m32b(digest) do
-  #  l = length(digest)
-
-  #  pad_amount =
-  #    case 56 - rem(l + 1, 64) do
-  #      n when n < 0 -> n + 64
-  #      n -> n
-  #    end
-
-  #  total_effective_len = l + pad_amount + 1 + 8
-
-  #  alignment_padding = @max_message_size - total_effective_len
-
-  #  digest
-  #  |> Enum.concat(build_m32b_ending(l, pad_amount))
-  #  |> Enum.concat(Stream.duplicate(0x0, alignment_padding))
-  #  |> Enum.chunk_every(4)
-  #  |> Enum.map(&(:binary.list_to_bin(&1) |> :binary.decode_unsigned(:little)))
-  #  |> (&Enum.concat([div(total_effective_len, 4)], &1)).()
-  #  |> Nx.tensor(type: {:u, 32})
-  # end
-
   defn calc_md5_as_string(m32b) do
     m32b
     |> ShadowHash.Gpu.Md5.md5_disect()
@@ -271,8 +178,6 @@ defmodule ShadowHash.Gpu.Md5crypt do
   end
 
   defn create_a_tail(pwd_len, even_char) do
-    # 1, 0 len=2
-    # calc_len = floor(:math.log(pwd_len) / :math.log(2)) + 1
     calc_len =
       pwd_len
       |> Nx.log()
@@ -348,10 +253,6 @@ defmodule ShadowHash.Gpu.Md5crypt do
   end
 
   defn md5crypt(passwords, salt) do
-    # passwords = passwords |> create()
-
-    # salt = Nx.devectorize(create([salt]))[0]
-
     [salt, magic, _] = Nx.broadcast_vectors([salt, str_magic(), passwords])
 
     db =
@@ -396,127 +297,5 @@ defmodule ShadowHash.Gpu.Md5crypt do
     Nx.concatenate([Nx.tensor([1]), r])
     |> Nx.argmax()
     |> Nx.subtract(1)
-  end
-
-  def test_concat() do
-    a = ShadowHash.Gpu.Md5crypt.create_set([~c"bob", ~c"timmy"])
-    b = ShadowHash.Gpu.Md5crypt.create_set([~c"cba", ~c"abc"])
-
-    concat(a, b)
-  end
-
-  def test_concat_length() do
-    a = ShadowHash.Gpu.Md5crypt.create_set([~c"bob", ~c"timmy"])
-
-    concat_length(a)
-  end
-
-  def test_pack() do
-    t = Nx.iota({@max_message_size_bytes}) |> Nx.as_type({:u, 8})
-    t0 = Nx.add(Nx.iota({@max_message_size_bytes}), 5) |> Nx.as_type({:u, 8})
-
-    r = Nx.stack([t, t0]) |> Nx.vectorize(:rows)
-
-    pack_as_dwords(r)
-  end
-
-  def test_buildm32b() do
-    a =
-      ShadowHash.Gpu.Md5crypt.create_set([
-        ~c"bob",
-        ~c"timmaaaaaaaaaaaay"
-      ])
-
-    build_m32b(a)
-    |> IO.inspect(limit: :infinity)
-
-    # build_m32b_faster(a)
-    |> IO.inspect(limit: :infinity)
-  end
-
-  def test_create_password_map() do
-    r =
-      ShadowHash.Gpu.Md5crypt.create_set([
-        ~c"bob",
-        ~c"timmaaaaaaaaaaaay"
-      ])
-
-    IO.puts("What???")
-    create_password_map(r, r[0]) |> IO.inspect(limit: :infinity)
-  end
-
-  def test_repeatedly() do
-    r =
-      ShadowHash.Gpu.Md5crypt.create_set([
-        ~c"bob",
-        ~c"timmaaaaaaaaaaaay"
-      ])
-
-    repeatedly(r, Nx.vectorize(Nx.tensor([8, 4], type: {:u, 8}), :rows))
-  end
-
-  def test_md5crypt() do
-    compiled = Nx.Defn.jit(&md5crypt/2, compiler: EXLA)
-
-    [
-      ~c"tp"
-      # ~c"bob"
-    ]
-    |> create_set()
-    |> compiled.(create(~c"cobKo5Ks"))
-  end
-
-  def benchmark_do(compiled, data) do
-    data
-    |> compiled.(create(~c"cobKo5Ks"))
-  end
-
-  def benchmark() do
-    compiled = Nx.Defn.jit(&md5crypt/2, compiler: EXLA)
-
-    # compiled = Nx.Defn.compile(&md5crypt/2, [Nx.template({150}, :u8), Nx.template({150}, :u8)], compiler: EXLA)
-
-    data =
-      [~c"tp"]
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> Enum.concat(test_benchmark_passwords())
-      |> create_set()
-
-    data
-    |> compiled.(create(~c"cobKo5Ks"))
-
-    IO.puts("Warmup done...")
-
-    {time, r} = :timer.tc(__MODULE__, :benchmark_do, [compiled, data])
-
-    IO.puts(time / 1000_000)
-    r
-  end
-
-  def test_findmd5() do
-    compiled = Nx.Defn.jit(&md5crypt_find/3, compiler: EXLA)
-
-    [
-      ~c"ab",
-      ~c"cd",
-      ~c"tp",
-      ~c"fg"
-    ]
-    |> create_set()
-    |> compiled.(
-      create(~c"cobKo5Ks"),
-      Nx.tensor([8, 56, 211, 120, 45, 179, 217, 228, 179, 252, 230, 245, 221, 171, 68, 113],
-        type: {:u, 8}
-      )
-    )
   end
 end
