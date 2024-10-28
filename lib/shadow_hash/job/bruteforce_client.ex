@@ -10,21 +10,12 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.Gpu.Md5crypt
   alias ShadowHash.ShadowBase64
 
-  def start_link(gpu_acceleration) do
+  def start_link(gpu_hashers) do
     Logger.info("* Bruteforce Client Starting")
 
-    gpu_hashers =
-      if gpu_acceleration do
-        %{
-          md5crypt: Nx.Defn.jit(&Md5crypt.md5crypt_find/3, compiler: EXLA)
-        }
-      else
-        %{}
-      end
+    :sleeplocks.new(1, name: :gpu_lock)
 
     spawn(__MODULE__, :process, [gpu_hashers])
-
-    :sleeplocks.new(1, name: :gpu_lock)
   end
 
   def process(gpu_hashers) do
@@ -103,6 +94,10 @@ defmodule ShadowHash.Job.BruteforceClient do
       |> ShadowBase64.decode_b64_hash()
       |> Nx.tensor(type: {:u, 8})
 
+    Logger.info("Tensor data constructed for GPU hashing. Waiting for lock...")
+    :sleeplocks.acquire(:gpu_lock)
+    Logger.info("Lock acquired. Applying GPU accelerated hashing")
+
     try do
       Map.get(gpu_hashers, :md5crypt).(
         passwords,
@@ -110,13 +105,17 @@ defmodule ShadowHash.Job.BruteforceClient do
         needle
       )
       |> Nx.to_number()
-      |> IO.inspect()
       |> case do
         -1 -> nil
         n -> {:ok, PasswordGraph.from_index(n + start, charset)}
       end
     rescue
-      r -> r |> IO.inspect()
+      r ->
+        Logger.error("GPU Hasher failed. Dumping information to IO.Inspect...")
+        r |> IO.inspect()
+    after
+      Logger.info("Releasing GPU lock")
+      :sleeplocks.release(:gpu_lock)
     end
   end
 
@@ -134,19 +133,8 @@ defmodule ShadowHash.Job.BruteforceClient do
       Logger.info("No md5crypt GPU hasher loaded. Falling back to CPU hasher.")
       handle_generic_cpu(gpu_hashers, algo, target, job)
     else
-      :sleeplocks.attempt(:gpu_lock)
-      |> case do
-        :ok ->
-          Logger.info("Lock acquired. Applying GPU accelerated hashing")
-          r = handle_md5crypt_gpu(gpu_hashers, algo, target, job)
-          Logger.info("Releasing lock")
-          :sleeplocks.release(:gpu_lock)
-          r
-
-        _ ->
-          Logger.info("GPU is in use. Falling back to CPU bound")
-          handle_generic_cpu(gpu_hashers, algo, target, job)
-      end
+      Logger.info("Md5crypt gpu hasher is available. Using GPU Hasher")
+      handle_md5crypt_gpu(gpu_hashers, algo, target, job)
     end
   end
 

@@ -9,8 +9,8 @@ defmodule ShadowHash.Shadow do
   alias ShadowHash.Job.JobScheduler
   alias ShadowHash.Job.DictionaryStreamJob
   alias ShadowHash.Job.BruteforceJob
-
   alias ShadowHash.Job.BruteforceClient
+  alias ShadowHash.Gpu.Md5crypt
 
   defp resolve_charset(false), do: PasswordGraph.printable_mapping()
   defp resolve_charset(true), do: PasswordGraph.all_mapping()
@@ -46,21 +46,24 @@ defmodule ShadowHash.Shadow do
         verbose: verbose,
         gpu: gpu_acceleration
       }) do
-
     unless verbose do
-      Logger.configure([level: :none])
+      Logger.configure(level: :none)
     end
 
     ErlexecBootstrap.prepare_port()
     BruteforceJobServer.start_link()
 
+    gpu_hashers = create_gpu_hashers(gpu_acceleration)
+
     workers =
       unless non_worker do
-        # :erlang.system_info(:logical_processors_available)
         1..:erlang.system_info(:logical_processors_available)
-        |> Enum.map(fn _ -> BruteforceClient.start_link(gpu_acceleration) end)
+        |> Enum.map(fn _ -> BruteforceClient.start_link(gpu_hashers) end)
       else
-        IO.puts("!!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs.")
+        IO.puts(
+          "!!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs."
+        )
+
         []
       end
 
@@ -73,6 +76,16 @@ defmodule ShadowHash.Shadow do
     process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
 
     for {:ok, w} <- workers, do: BruteforceClient.shutdown(w)
+  end
+
+  defp create_gpu_hashers(enable_acceleration) do
+    if enable_acceleration do
+      %{
+        md5crypt: Nx.Defn.jit(&Md5crypt.md5crypt_find/3, compiler: EXLA)
+      }
+    else
+      %{}
+    end
   end
 
   def process_file(user, {:ok, contents}, dictionary, charset) do
