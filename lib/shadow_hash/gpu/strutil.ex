@@ -220,7 +220,7 @@ defmodule ShadowHash.Gpu.Strutil do
       |> Nx.divide(Nx.tensor([1, 256, 65536, 16_777_216]))
       |> Nx.as_type({:u, 8})
       |> Nx.pad(0, [{0, @max_message_size_bytes - 4, 0}])
-      #|> Nx.take(shift_right_message_64_new()[shift_amount])
+      # |> Nx.take(shift_right_message_64_new()[shift_amount])
       |> shift_tensor(
         str_len |> Nx.add(pad_amount) |> Nx.add(1),
         shift_right_message_64()
@@ -264,25 +264,25 @@ defmodule ShadowHash.Gpu.Strutil do
       |> Nx.as_type({:u, 8})
       |> Nx.pad(0, [{0, @max_message_size_bytes - 4, 0}])
       |> Nx.take(shift_right_message_64_new()[shift_amount])
-      |> Nx.squeeze
-      #|> shift_tensor(
-      #  str_len |> Nx.add(pad_amount) |> Nx.add(1),
-      #  shift_right_message_64()
-      #)
-      #|> IO.inspect(limit: :infinity)
+      |> Nx.squeeze()
 
-      #exit(0)
+    # |> shift_tensor(
+    #  str_len |> Nx.add(pad_amount) |> Nx.add(1),
+    #  shift_right_message_64()
+    # )
+    # |> IO.inspect(limit: :infinity)
+
+    # exit(0)
 
     [padding, _] = Nx.broadcast_vectors([message_m32b_padding(), digest])
-
 
     shift_amount = str_len |> Nx.remainder(256)
 
     encoded =
       padding
-      #|> shift_tensor(str_len, shift_right_message_64())
+      # |> shift_tensor(str_len, shift_right_message_64())
       |> Nx.take(shift_right_message_64_new()[shift_amount])
-      |> Nx.squeeze
+      |> Nx.squeeze()
       |> Nx.add(length_little_endian)
       |> Nx.add(unwrap_string_to_message(digest))
       |> pack_as_dwords()
@@ -435,6 +435,21 @@ defmodule ShadowHash.Gpu.Strutil do
     r |> Nx.slice([1], [16])
   end
 
+  defn md5crypt_find(passwords, salt, search) do
+    w =
+      md5crypt(passwords, salt)
+      |> Nx.subtract(search)
+      |> Nx.any()
+
+    r = Nx.subtract(1, w)
+    |> Nx.devectorize
+    |> Nx.multiply(2)
+
+    Nx.concatenate([Nx.tensor([1]), r])
+    |> Nx.argmax
+    |> Nx.subtract(1)
+  end
+
   def test_concat() do
     a = ShadowHash.Gpu.Strutil.create_set([~c"bob", ~c"timmy"])
     b = ShadowHash.Gpu.Strutil.create_set([~c"cba", ~c"abc"])
@@ -467,7 +482,7 @@ defmodule ShadowHash.Gpu.Strutil do
     build_m32b(a)
     |> IO.inspect(limit: :infinity)
 
-    #build_m32b_faster(a)
+    # build_m32b_faster(a)
     |> IO.inspect(limit: :infinity)
 
     # IO.puts("------------")
@@ -517,21 +532,23 @@ defmodule ShadowHash.Gpu.Strutil do
 
   def benchmark() do
     compiled = Nx.Defn.jit(&md5crypt/2, compiler: EXLA)
-    #compiled = Nx.Defn.compile(&md5crypt/2, [Nx.template({150}, :u8), Nx.template({150}, :u8)], compiler: EXLA)
 
-    data = [~c"tp"]
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> create_set()
+    # compiled = Nx.Defn.compile(&md5crypt/2, [Nx.template({150}, :u8), Nx.template({150}, :u8)], compiler: EXLA)
+
+    data =
+      [~c"tp"]
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> Enum.concat(test_benchmark_passwords())
+      |> create_set()
 
     data
     |> compiled.(create(~c"cobKo5Ks"))
@@ -542,5 +559,24 @@ defmodule ShadowHash.Gpu.Strutil do
 
     IO.puts(time / 1000_000)
     r
+  end
+
+  def test_findmd5() do
+    compiled = Nx.Defn.jit(&md5crypt_find/3, compiler: EXLA)
+
+    passwords =
+      [
+        ~c"ab",
+        ~c"cd",
+        ~c"tp",
+        ~c"fg"
+      ]
+      |> create_set()
+      |> compiled.(
+        create(~c"cobKo5Ks"),
+        Nx.tensor([8, 56, 211, 120, 45, 179, 217, 228, 179, 252, 230, 245, 221, 171, 68, 113],
+          type: {:u, 8}
+        )
+      )
   end
 end

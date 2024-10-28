@@ -5,9 +5,17 @@ defmodule ShadowHash.Job.JobScheduler do
 
   @ready_idle_timeout 5000
 
+  defp chunk_size(%{method: :md5crypt}) do
+    10000
+  end
+
+  defp chunk_size(_) do
+    500
+  end
+
   defp dispatch_worker(jobs, algo, target, worker_pid) do
     jobs
-    |> JobParser.take_job()
+    |> JobParser.take_job(chunk_size(algo))
     |> case do
       {current, next} ->
         send(worker_pid, {:work, algo, target, current})

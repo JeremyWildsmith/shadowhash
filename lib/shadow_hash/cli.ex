@@ -1,6 +1,9 @@
 defmodule ShadowHash.Cli do
+  use Mix.Task
+
   alias ShadowHash.Shadow
 
+  #Entry point for escripts
   def main(argv) do
     parse_args(argv)
     |> Shadow.process()

@@ -62,7 +62,7 @@ defmodule ShadowHash.Shadow do
 
     process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
 
-    for w <- workers, do: BruteforceClient.shutdown(w)
+    for {:ok, w} <- workers, do: BruteforceClient.shutdown(w)
   end
 
   def process_file(user, {:ok, contents}, dictionary, charset) do
