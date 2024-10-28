@@ -195,6 +195,49 @@ defmodule ShadowHash.Gpu.Strutil do
     |> Nx.as_type({:u, 32})
   end
 
+  defn build_m32b_slow(digest) do
+    str_len = digest[0] |> Nx.as_type({:u, 32})
+
+    pad_amount =
+      Nx.tensor([56])
+      |> Nx.subtract(Nx.remainder(Nx.add(str_len, 1), 64))
+      |> Nx.add(64)
+      |> Nx.remainder(64)
+
+    total_effective_len =
+      str_len
+      |> Nx.add(pad_amount)
+      |> Nx.add(1 + 8)
+      |> Nx.divide(4)
+      |> Nx.as_type({:u, 32})
+
+    original_length_bits = Nx.multiply(str_len, 8)
+
+    shift_amount = str_len |> Nx.add(pad_amount) |> Nx.add(1) |> Nx.remainder(256)
+
+    length_little_endian =
+      Nx.broadcast(original_length_bits, {4})
+      |> Nx.divide(Nx.tensor([1, 256, 65536, 16_777_216]))
+      |> Nx.as_type({:u, 8})
+      |> Nx.pad(0, [{0, @max_message_size_bytes - 4, 0}])
+      #|> Nx.take(shift_right_message_64_new()[shift_amount])
+      |> shift_tensor(
+        str_len |> Nx.add(pad_amount) |> Nx.add(1),
+        shift_right_message_64()
+      )
+
+    [padding, _] = Nx.broadcast_vectors([message_m32b_padding(), digest])
+
+    encoded =
+      padding
+      |> shift_tensor(str_len, shift_right_message_64())
+      |> Nx.add(length_little_endian)
+      |> Nx.add(unwrap_string_to_message(digest))
+      |> pack_as_dwords()
+
+    Nx.concatenate([total_effective_len, encoded])
+  end
+
   defn build_m32b(digest) do
     str_len = digest[0] |> Nx.as_type({:u, 32})
 
@@ -213,21 +256,33 @@ defmodule ShadowHash.Gpu.Strutil do
 
     original_length_bits = Nx.multiply(str_len, 8)
 
+    shift_amount = str_len |> Nx.add(pad_amount) |> Nx.add(1) |> Nx.remainder(256)
+
     length_little_endian =
       Nx.broadcast(original_length_bits, {4})
       |> Nx.divide(Nx.tensor([1, 256, 65536, 16_777_216]))
       |> Nx.as_type({:u, 8})
       |> Nx.pad(0, [{0, @max_message_size_bytes - 4, 0}])
-      |> shift_tensor(
-        str_len |> Nx.add(pad_amount) |> Nx.add(1),
-        shift_right_message_64()
-      )
+      |> Nx.take(shift_right_message_64_new()[shift_amount])
+      |> Nx.squeeze
+      #|> shift_tensor(
+      #  str_len |> Nx.add(pad_amount) |> Nx.add(1),
+      #  shift_right_message_64()
+      #)
+      #|> IO.inspect(limit: :infinity)
+
+      #exit(0)
 
     [padding, _] = Nx.broadcast_vectors([message_m32b_padding(), digest])
 
+
+    shift_amount = str_len |> Nx.remainder(256)
+
     encoded =
       padding
-      |> shift_tensor(str_len, shift_right_message_64())
+      #|> shift_tensor(str_len, shift_right_message_64())
+      |> Nx.take(shift_right_message_64_new()[shift_amount])
+      |> Nx.squeeze
       |> Nx.add(length_little_endian)
       |> Nx.add(unwrap_string_to_message(digest))
       |> pack_as_dwords()
@@ -412,6 +467,9 @@ defmodule ShadowHash.Gpu.Strutil do
     build_m32b(a)
     |> IO.inspect(limit: :infinity)
 
+    #build_m32b_faster(a)
+    |> IO.inspect(limit: :infinity)
+
     # IO.puts("------------")
 
     # ShadowHash.Gpu.Md5.build_m32b(~c"bob")
@@ -461,7 +519,8 @@ defmodule ShadowHash.Gpu.Strutil do
     compiled = Nx.Defn.jit(&md5crypt/2, compiler: EXLA)
     #compiled = Nx.Defn.compile(&md5crypt/2, [Nx.template({150}, :u8), Nx.template({150}, :u8)], compiler: EXLA)
 
-    data = test_benchmark_passwords()
+    data = [~c"tp"]
+    |> Enum.concat(test_benchmark_passwords())
     |> Enum.concat(test_benchmark_passwords())
     |> Enum.concat(test_benchmark_passwords())
     |> Enum.concat(test_benchmark_passwords())
@@ -482,5 +541,6 @@ defmodule ShadowHash.Gpu.Strutil do
     {time, r} = :timer.tc(__MODULE__, :benchmark_do, [compiled, data])
 
     IO.puts(time / 1000_000)
+    r
   end
 end
