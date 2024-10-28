@@ -26,14 +26,22 @@ defmodule ShadowHash.Shadow do
       " <shadow path> : The path to the linux shadow file containing hashed user passwords."
     )
 
-    IO.puts(" --user         : Supply a username, the passwords for which will be cracked.")
+    IO.puts(" --user <user>  : Supply a username, the passwords for which will be cracked.")
     IO.puts("                  Otherwise, attempts to crack all passwords in the shadow file.")
     IO.puts(" --all-chars    : Will also bruteforce with non-printable characters")
-    IO.puts(" --dictionary   : Supply a dictionary of passwords that are attempted initially")
+
+    IO.puts(
+      " --dictionary <dictionary>  : Supply a dictionary of passwords that are attempted initially"
+    )
+
     IO.puts(" --gpu          : Supported for md5crypt, will execute the hash algorithm")
     IO.puts("                  on the GPU. There is initial overhead to JIT compile to CUDA")
     IO.puts("                  but after JIT compiling, significantly faster.")
-    IO.puts(" --non-worker   : Do not spin up workers to process bruteforce requests")
+    IO.puts(" --gpu-warmup   : Warm-up GPU bruteforce algorithm. Useful when capturing")
+    IO.puts("                  timing metrics and you don't want to include start-up overhead")
+    IO.puts(" --workers      : Number of workers to process bruteforce requests. Defaults")
+    IO.puts("                  to number of available CPU cores. Be mindful of the memory constraint ")
+    IO.puts("                  of GPU if using GPU acceleration")
     IO.puts(" --verbose      : Print verbose logging")
   end
 
@@ -42,9 +50,10 @@ defmodule ShadowHash.Shadow do
         user: user,
         dictionary: dictionary,
         all_chars: all_chars,
-        non_worker: non_worker,
+        workers: num_workers,
         verbose: verbose,
-        gpu: gpu_acceleration
+        gpu: gpu_acceleration,
+        gpu_warmup: gpu_warmup
       }) do
     unless verbose do
       Logger.configure(level: :none)
@@ -53,35 +62,68 @@ defmodule ShadowHash.Shadow do
     ErlexecBootstrap.prepare_port()
     BruteforceJobServer.start_link()
 
-    gpu_hashers = create_gpu_hashers(gpu_acceleration)
+    gpu_hashers = create_gpu_hashers(gpu_acceleration, gpu_warmup)
+
+    non_worker = num_workers <= 0
 
     workers =
       unless non_worker do
-        1..:erlang.system_info(:logical_processors_available)
+        1..num_workers
         |> Enum.map(fn _ -> BruteforceClient.start_link(gpu_hashers) end)
       else
         IO.puts(
-          "!!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs."
+          " !!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs."
         )
 
         []
       end
 
     if gpu_acceleration do
-      IO.puts("*** GPU Acceleration is enabled.")
+      IO.puts(" *** GPU Acceleration is enabled.")
     else
-      IO.puts("!!! GPU Acceleration is disabled.")
+      IO.puts(" !!! GPU Acceleration is disabled.")
     end
+
+    IO.puts(" *** Using #{num_workers} worker processes ")
 
     process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
 
     for {:ok, w} <- workers, do: BruteforceClient.shutdown(w)
   end
 
-  defp create_gpu_hashers(enable_acceleration) do
+  defp warmup_gpu(gpu_hasher) do
+    passwords =
+      Stream.duplicate(~c"wu", JobScheduler.chunk_size(%{method: :md5crypt}))
+      |> Enum.to_list()
+      |> Md5crypt.create_set()
+
+    needle =
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      |> Nx.tensor(type: {:u, 8})
+
+    salt =
+      ~c"01234567"
+      |> Md5crypt.create()
+
+    gpu_hasher.(
+      passwords,
+      salt,
+      needle
+    )
+  end
+
+  defp create_gpu_hashers(enable_acceleration, warmup) do
     if enable_acceleration do
+      md5crypt_jit = Nx.Defn.jit(&Md5crypt.md5crypt_find/3, compiler: EXLA)
+
+      if warmup do
+        IO.puts("Warming up GPU JIT compile.")
+        warmup_gpu(md5crypt_jit)
+        IO.puts("Warmup done.")
+      end
+
       %{
-        md5crypt: Nx.Defn.jit(&Md5crypt.md5crypt_find/3, compiler: EXLA)
+        md5crypt: md5crypt_jit
       }
     else
       %{}
@@ -97,10 +139,10 @@ defmodule ShadowHash.Shadow do
       )
     else
       IO.puts(
-        "The following users were found matching the specified criteria. Bruteforce will be performed on the following users"
+        " *** Bruteforce will be performed on the following users"
       )
 
-      pwd |> Enum.each(fn {u, _} -> IO.puts(" * #{u}") end)
+      pwd |> Enum.each(fn {u, _} -> IO.puts("     - #{u}") end)
 
       IO.puts("\nStarting attack...")
       for {u, p} <- pwd, do: process_file_entry(u, p, dictionary, charset)

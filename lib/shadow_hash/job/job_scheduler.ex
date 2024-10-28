@@ -5,11 +5,11 @@ defmodule ShadowHash.Job.JobScheduler do
 
   @ready_idle_timeout 5000
 
-  defp chunk_size(%{method: :md5crypt}) do
-    10000
+  def chunk_size(%{method: :md5crypt}) do
+    11000
   end
 
-  defp chunk_size(_) do
+  def chunk_size(_) do
     500
   end
 

@@ -1,9 +1,8 @@
 defmodule ShadowHash.Cli do
-  use Mix.Task
 
   alias ShadowHash.Shadow
 
-  #Entry point for escripts
+  # Entry point for escripts
   def main(argv) do
     parse_args(argv)
     |> Shadow.process()
@@ -12,12 +11,28 @@ defmodule ShadowHash.Cli do
   def parse_args(argv),
     do:
       OptionParser.parse(argv,
-        strict: [shadow: :string, user: :string, all_chars: :boolean, non_worker: :boolean, verbose: :boolean, gpu: :boolean, dictionary: :string]
+        strict: [
+          shadow: :string,
+          user: :string,
+          all_chars: :boolean,
+          workers: :integer,
+          verbose: :boolean,
+          gpu: :boolean,
+          gpu_warmup: :boolean,
+          dictionary: :string
+        ]
       )
       |> _parse_args
 
   defp _parse_args({[], [shadow], []}),
-    do: %{shadow: shadow, user: "*", dictionary: nil, all_chars: false, non_worker: false, verbose: false}
+    do: %{
+      shadow: shadow,
+      user: "*",
+      dictionary: nil,
+      all_chars: false,
+      non_worker: false,
+      verbose: false
+    }
 
   defp _parse_args({optional, [shadow], []}) do
     cfg = %{shadow: shadow}
@@ -29,10 +44,11 @@ defmodule ShadowHash.Cli do
     )
     |> Map.put_new(:dictionary, nil)
     |> Map.put_new(:all_chars, false)
-    |> Map.put_new(:non_worker, false)
+    |> Map.put_new(:workers, :erlang.system_info(:logical_processors_available))
     |> Map.put_new(:verbose, false)
     |> Map.put_new(:user, "*")
     |> Map.put_new(:gpu, false)
+    |> Map.put_new(:gpu_warmup, false)
   end
 
   defp _parse_args(_), do: :help

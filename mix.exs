@@ -24,8 +24,7 @@ defmodule ShadowHash.MixProject do
     [
       {:erlexec, "~> 2.0", runtime: false},
       {:nx, "~> 0.9.1"},
-      {:exla, "~> 0.9.1"},
-      {:sleeplocks, "~> 1.0"}
+      {:exla, "~> 0.9.1"}
     ]
   end
 end

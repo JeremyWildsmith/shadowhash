@@ -13,8 +13,6 @@ defmodule ShadowHash.Job.BruteforceClient do
   def start_link(gpu_hashers) do
     Logger.info("* Bruteforce Client Starting")
 
-    :sleeplocks.new(1, name: :gpu_lock)
-
     spawn(__MODULE__, :process, [gpu_hashers])
   end
 
@@ -76,6 +74,7 @@ defmodule ShadowHash.Job.BruteforceClient do
          last: last,
          charset: charset
        }) do
+
     salt =
       config
       |> :binary.bin_to_list()
@@ -95,7 +94,6 @@ defmodule ShadowHash.Job.BruteforceClient do
       |> Nx.tensor(type: {:u, 8})
 
     Logger.info("Tensor data constructed for GPU hashing. Waiting for lock...")
-    :sleeplocks.acquire(:gpu_lock)
     Logger.info("Lock acquired. Applying GPU accelerated hashing")
 
     try do
@@ -115,7 +113,6 @@ defmodule ShadowHash.Job.BruteforceClient do
         r |> IO.inspect()
     after
       Logger.info("Releasing GPU lock")
-      :sleeplocks.release(:gpu_lock)
     end
   end
 

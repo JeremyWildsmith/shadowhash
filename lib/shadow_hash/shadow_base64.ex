@@ -1,8 +1,9 @@
-"""
-Linux shadow file uses a custom variation of Base64 encoding for storing hashes.
-This module includes functions to decode the custom Base64 encoding.
-"""
 defmodule ShadowHash.ShadowBase64 do
+  @moduledoc """
+  Linux shadow file uses a custom variation of Base64 encoding for storing hashes.
+  This module includes functions to decode the custom Base64 encoding.
+  """
+
   @ito_index_lookup {
     0,
     1,
