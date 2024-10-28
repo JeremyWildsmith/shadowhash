@@ -1,7 +1,7 @@
 defmodule ShadowHash.Gpu.Md5 do
   alias ShadowHash.Gpu.Md5core
 
-  @max_password_size 100
+  @max_password_size 200
 
   @max_message_size 64 * 4
 
@@ -126,7 +126,7 @@ defmodule ShadowHash.Gpu.Md5 do
     |> Enum.concat(:binary.bin_to_list(<<original_length_bits::little-64>>))
   end
 
-  defp build_m32b(digest) do
+  def build_m32b(digest) do
     l = length(digest)
 
     pad_amount =
@@ -148,11 +148,18 @@ defmodule ShadowHash.Gpu.Md5 do
     |> Nx.tensor(type: {:u, 32})
   end
 
-  def encode_messages(plaintext) when is_list(plaintext) do
+  def encode_messages_old(plaintext) when is_list(plaintext) do
     plaintext
     |> Enum.map(&build_m32b/1)
     |> Nx.stack()
     |> Nx.vectorize(:rows)
+  end
+
+  def encode_messages(plaintext) when is_list(plaintext) do
+    r =
+      plaintext
+      |> ShadowHash.Gpu.Strutil.create_set()
+      |> ShadowHash.Gpu.Strutil.build_m32b()
   end
 
   def md5_from_encoded(messages) do
@@ -180,61 +187,208 @@ defmodule ShadowHash.Gpu.Md5 do
   end
 
   def create_a_tail(pwd_len, even_char) do
-    Stream.unfold(pwd_len, fn l ->
-      case l do
-        0 ->
-          nil
+    """
+    calc_len = floor(:math.log(pwd_len) / :math.log(2)) + 1
 
-        n ->
-          if Bitwise.band(n, 1) != 0 do
-            {0, Bitwise.bsr(n, 1)}
+    old_r =
+      Stream.unfold(pwd_len, fn l ->
+        case l do
+          0 ->
+            nil
+
+          n ->
+            if rem(n, 2) == 0 do
+              {even_char, div(n, 2)}
+            else
+              {0, div(n, 2)}
+            end
+        end
+      end)
+
+    calc_len = floor(:math.log(pwd_len) / :math.log(2)) + 1
+
+    new_r =
+      0..(calc_len - 1)
+      |> Enum.map(fn n ->
+        pwd_len = div(pwd_len, 2 ** n)
+        if rem(pwd_len, 2) == 0 do
+          even_char
+        else
+          0
+        end
+      end)
+
+    eq =
+      new_r
+      |> Enum.zip(old_r)
+      |> Enum.all?(fn {a, b} -> a == b end)
+
+    if not eq do
+      new_r
+      |> Enum.zip(old_r)
+      |> IO.inspect()
+
+      raise "HMMM"
+    end
+
+    new_r
+    # IO.puts("AAA")
+    # IO.inspect(pwd_len)
+    # w
+    """
+
+    calc_len = floor(:math.log(pwd_len) / :math.log(2)) + 1
+    # Things start breaking when these numbers get too big
+    pow_counter = Nx.iota({150}) |> Nx.min(20)
+    divisors = Nx.broadcast(Nx.tensor([2]), {150}) |> Nx.pow(pow_counter) |> Nx.as_type({:u, 32})
+
+    tw =
+      Nx.broadcast(Nx.tensor([pwd_len]), {150})
+      |> Nx.as_type({:u, 32})
+      |> Nx.divide(divisors)
+      |> Nx.as_type({:u, 32})
+      |> Nx.remainder(2)
+
+    t =
+      Nx.tensor([1])
+      |> Nx.subtract(tw)
+      |> Nx.multiply(even_char)
+      |> Nx.slice([0], [calc_len])
+      |> Nx.to_list()
+
+    r2 =
+      0..(calc_len - 1)
+      |> Enum.map(fn n ->
+        pwd_len = div(pwd_len, 2 ** n)
+
+        if rem(pwd_len, 2) == 0 do
+          even_char
+        else
+          0
+        end
+      end)
+
+    # r2 |> IO.inspect()
+    # t |> IO.inspect()
+    # exit(0)
+
+    t
+  end
+
+  def create_next_da_old(i, current_da, passwords, salt, compiled_md5_disect) do
+    t_da = ShadowHash.Gpu.Strutil.create_set(current_da)
+    t_passwords = ShadowHash.Gpu.Strutil.create_set(passwords)
+    [t_salt, _] = Nx.broadcast_vectors([ShadowHash.Gpu.Strutil.create(salt), t_passwords])
+
+    msg_a_choice = Nx.remainder(i, 2)
+    msg_b_choice = Nx.remainder(i, 3) |> Nx.min(1)
+    msg_c_choice = Nx.remainder(i, 7) |> Nx.min(1)
+    msg_d_choice = Nx.remainder(i, 2)
+
+    msg =
+      Nx.add(
+        msg_a_choice |> Nx.multiply(t_passwords),
+        1 |> Nx.subtract(msg_a_choice) |> Nx.multiply(t_da)
+      )
+
+    msg_b_eval = ShadowHash.Gpu.Strutil.concat(msg, t_salt)
+
+    msg =
+      Nx.add(
+        msg_b_choice |> Nx.multiply(msg_b_eval),
+        1 |> Nx.subtract(msg_b_choice) |> Nx.multiply(msg)
+      )
+
+    msg_c_eval = ShadowHash.Gpu.Strutil.concat(msg, t_passwords)
+
+    msg =
+      Nx.add(
+        msg_c_choice |> Nx.multiply(msg_c_eval),
+        1 |> Nx.subtract(msg_c_choice) |> Nx.multiply(msg)
+      )
+
+    msg_d_eval_a = ShadowHash.Gpu.Strutil.concat(msg, t_da)
+    msg_d_eval_b = ShadowHash.Gpu.Strutil.concat(msg, t_passwords)
+
+    msg =
+      Nx.add(
+        msg_d_choice |> Nx.multiply(msg_d_eval_a),
+        1 |> Nx.subtract(msg_d_choice) |> Nx.multiply(msg_d_eval_b)
+      )
+
+    new_plain_output =
+      msg
+      |> Nx.to_list()
+      |> Enum.map(fn r ->
+        t = List.first(r)
+
+        r
+        |> Enum.drop(1)
+        |> Enum.take(t)
+      end)
+
+    """
+    old_plain_output =
+      current_da
+      |> Enum.zip(passwords)
+      |> Enum.map(fn {da, pwd} ->
+        msg =
+          if rem(i, 2) == 1 do
+            pwd
           else
-            {even_char, Bitwise.bsr(n, 1)}
+            da
           end
-      end
-    end)
-  end
 
+        msg =
+          if rem(i, 3) != 0 do
+            Enum.concat(msg, salt)
+          else
+            msg
+          end
 
-  def create_next_dar(i, current_da, passwords, salt, compiled_md5_disect) do
-    [0, 0, 0, 0]
-  end
+        msg =
+          if rem(i, 7) != 0 do
+            Enum.concat(msg, pwd)
+          else
+            msg
+          end
 
-  def create_next_da(i, current_da, passwords, salt, compiled_md5_disect) do
-    current_da
-    |> Enum.zip(passwords)
-    |> Enum.map(fn {da, pwd} ->
-      msg =
-        if rem(i, 2) == 1 do
-          pwd
-        else
-          da
-        end
-
-      msg =
-        if rem(i, 3) != 0 do
-          Enum.concat(msg, salt)
-        else
-          msg
-        end
-
-      msg =
-        if rem(i, 7) != 0 do
-          Enum.concat(msg, pwd)
-        else
-          msg
-        end
-
-      msg =
         if rem(i, 2) == 1 do
           Enum.concat(msg, da)
         else
           Enum.concat(msg, pwd)
         end
-    end)
+      end)
+
+    matches = new_plain_output
+    |> Enum.zip(old_plain_output)
+    |> Enum.all?(fn {a, b} -> a == b end)
+
+    if not matches do
+      old_plain_output |> IO.inspect
+      new_plain_output |> IO.inspect
+      raise "Error"
+    end
+    """
+
+    new_plain_output
     |> encode_messages()
     |> compiled_md5_disect.()
     |> Nx.to_list()
+  end
+
+  def create_next_da(i, current_da, passwords, salt, compiled_md5_disect) do
+    t_da = ShadowHash.Gpu.Strutil.create_set(current_da)
+    t_passwords = ShadowHash.Gpu.Strutil.create_set(passwords)
+    #[t_salt, _] = Nx.broadcast_vectors([ShadowHash.Gpu.Strutil.create(salt), t_passwords])
+
+    msg = ShadowHash.Gpu.Strutil.create_next_da(i, t_da, t_passwords, ShadowHash.Gpu.Strutil.create(salt))
+
+    msg
+    |> Nx.to_list()
+    |> Enum.map(fn e -> e |> Enum.drop(1) |> Enum.take(16) end)
+    #|> IO.inspect()
+
   end
 
   def md5crypt_raw(passwords, salt, compiled_md5_disect) do
@@ -270,6 +424,7 @@ defmodule ShadowHash.Gpu.Md5 do
 
     0..999
     |> Enum.reduce(da, fn i, da ->
+      IO.puts(i)
       create_next_da(i, da, passwords, salt, compiled_md5_disect)
     end)
   end
@@ -280,7 +435,15 @@ defmodule ShadowHash.Gpu.Md5 do
     IO.puts("start")
 
     md5crypt_raw(passwords, salt, compiled)
-    #|> Enum.map(&Base.encode16(:binary.list_to_bin(&1)))
+    # |> Enum.map(&Base.encode16(:binary.list_to_bin(&1)))
+  end
+
+  def test_hash() do
+    t = [
+      ~c"tp"
+    ]
+
+    md5crypt(t, ~c"cobKo5Ks")
   end
 
   def benchmark() do
