@@ -1,4 +1,4 @@
-defmodule ShadowHash.Gpu.Strutil do
+defmodule ShadowHash.Gpu.Md5crypt do
   import Nx.Defn
   import ShadowHash.Gpu.Constants
 
@@ -313,7 +313,7 @@ defmodule ShadowHash.Gpu.Strutil do
 
   defn calc_md5_as_string(m32b) do
     m32b
-    |> ShadowHash.Gpu.Md5core.md5_disect()
+    |> ShadowHash.Gpu.Md5.md5_disect()
     |> Nx.pad(0, [{1, @max_str_size - 16 - 1, 0}])
     |> Nx.indexed_put(
       Nx.tensor([0]),
@@ -369,7 +369,7 @@ defmodule ShadowHash.Gpu.Strutil do
         1 |> Nx.subtract(msg_a_choice) |> Nx.multiply(current_da)
       )
 
-    msg_b_eval = ShadowHash.Gpu.Strutil.concat(msg, salt)
+    msg_b_eval = ShadowHash.Gpu.Md5crypt.concat(msg, salt)
 
     msg =
       Nx.add(
@@ -377,7 +377,7 @@ defmodule ShadowHash.Gpu.Strutil do
         1 |> Nx.subtract(msg_b_choice) |> Nx.multiply(msg)
       )
 
-    msg_c_eval = ShadowHash.Gpu.Strutil.concat(msg, passwords)
+    msg_c_eval = ShadowHash.Gpu.Md5crypt.concat(msg, passwords)
 
     msg =
       Nx.add(
@@ -385,8 +385,8 @@ defmodule ShadowHash.Gpu.Strutil do
         1 |> Nx.subtract(msg_c_choice) |> Nx.multiply(msg)
       )
 
-    msg_d_eval_a = ShadowHash.Gpu.Strutil.concat(msg, current_da)
-    msg_d_eval_b = ShadowHash.Gpu.Strutil.concat(msg, passwords)
+    msg_d_eval_a = ShadowHash.Gpu.Md5crypt.concat(msg, current_da)
+    msg_d_eval_b = ShadowHash.Gpu.Md5crypt.concat(msg, passwords)
 
     msg =
       Nx.add(
@@ -451,14 +451,14 @@ defmodule ShadowHash.Gpu.Strutil do
   end
 
   def test_concat() do
-    a = ShadowHash.Gpu.Strutil.create_set([~c"bob", ~c"timmy"])
-    b = ShadowHash.Gpu.Strutil.create_set([~c"cba", ~c"abc"])
+    a = ShadowHash.Gpu.Md5crypt.create_set([~c"bob", ~c"timmy"])
+    b = ShadowHash.Gpu.Md5crypt.create_set([~c"cba", ~c"abc"])
 
     concat(a, b)
   end
 
   def test_concat_length() do
-    a = ShadowHash.Gpu.Strutil.create_set([~c"bob", ~c"timmy"])
+    a = ShadowHash.Gpu.Md5crypt.create_set([~c"bob", ~c"timmy"])
 
     concat_length(a)
   end
@@ -474,7 +474,7 @@ defmodule ShadowHash.Gpu.Strutil do
 
   def test_buildm32b() do
     a =
-      ShadowHash.Gpu.Strutil.create_set([
+      ShadowHash.Gpu.Md5crypt.create_set([
         ~c"bob",
         ~c"timmaaaaaaaaaaaay"
       ])
@@ -484,18 +484,11 @@ defmodule ShadowHash.Gpu.Strutil do
 
     # build_m32b_faster(a)
     |> IO.inspect(limit: :infinity)
-
-    # IO.puts("------------")
-
-    # ShadowHash.Gpu.Md5.build_m32b(~c"bob")
-    # |> IO.inspect(limit: :infinity)
-
-    # unwrap_string(a)
   end
 
   def test_create_password_map() do
     r =
-      ShadowHash.Gpu.Strutil.create_set([
+      ShadowHash.Gpu.Md5crypt.create_set([
         ~c"bob",
         ~c"timmaaaaaaaaaaaay"
       ])
@@ -506,7 +499,7 @@ defmodule ShadowHash.Gpu.Strutil do
 
   def test_repeatedly() do
     r =
-      ShadowHash.Gpu.Strutil.create_set([
+      ShadowHash.Gpu.Md5crypt.create_set([
         ~c"bob",
         ~c"timmaaaaaaaaaaaay"
       ])

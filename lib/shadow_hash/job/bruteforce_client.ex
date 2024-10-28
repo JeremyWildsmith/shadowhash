@@ -7,8 +7,8 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.Job.BruteforceJob
   alias ShadowHash.PasswordGraph
   alias ShadowHash.Hash
-  alias ShadowHash.Gpu.Strutil
-  alias ShadowHash.Gpu.Md5
+  alias ShadowHash.Gpu.Md5crypt
+  alias ShadowHash.ShadowBase64
 
   def start_link(gpu_acceleration) do
     Logger.info("* Bruteforce Client Starting")
@@ -16,7 +16,7 @@ defmodule ShadowHash.Job.BruteforceClient do
     gpu_hashers =
       if gpu_acceleration do
         %{
-          md5crypt: Nx.Defn.jit(&Strutil.md5crypt_find/3, compiler: EXLA)
+          md5crypt: Nx.Defn.jit(&Md5crypt.md5crypt_find/3, compiler: EXLA)
         }
       else
         %{}
@@ -89,18 +89,18 @@ defmodule ShadowHash.Job.BruteforceClient do
       config
       |> :binary.bin_to_list()
       |> Enum.drop(3)
-      |> Strutil.create()
+      |> Md5crypt.create()
 
     passwords =
       start..last
       |> Stream.map(&(PasswordGraph.from_index(&1, charset) |> :binary.bin_to_list()))
       |> Enum.to_list()
-      |> Strutil.create_set()
+      |> Md5crypt.create_set()
 
     needle =
       target
       |> :binary.bin_to_list()
-      |> Md5.decode_b64_hash()
+      |> ShadowBase64.decode_b64_hash()
       |> Nx.tensor(type: {:u, 8})
 
     try do
