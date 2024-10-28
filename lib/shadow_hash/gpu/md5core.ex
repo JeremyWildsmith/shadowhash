@@ -1,8 +1,6 @@
 defmodule ShadowHash.Gpu.Md5core do
   import Nx.Defn
 
-  @max_message_size 64 * 3
-
   @shift_per_round Nx.tensor(
                      [
                        7,
@@ -150,18 +148,6 @@ defmodule ShadowHash.Gpu.Md5core do
       Nx.bitwise_or(
         Nx.left_shift(n, r),
         Nx.right_shift(n, Nx.subtract(32, r))
-      ),
-      {:u, 32}
-    )
-  end
-
-  defn rotate_right(n, shift_count) do
-    r = Nx.remainder(shift_count, 32)
-
-    Nx.as_type(
-      Nx.bitwise_or(
-        Nx.right_shift(n, r),
-        Nx.left_shift(n, Nx.subtract(32, r))
       ),
       {:u, 32}
     )
@@ -366,7 +352,6 @@ defmodule ShadowHash.Gpu.Md5core do
           )
           |> Nx.as_type({:u, 32})
 
-        # next_abcd = Nx.broadcast([0], Nx.shape(abcd))
         {x + 1, m32b, m32_shape, hash_size, next_abcd}
       end
 
@@ -374,12 +359,8 @@ defmodule ShadowHash.Gpu.Md5core do
   end
 
   defn md5(m32b) do
-    final =
-      m32b
-      |> md5_of
-
-    # Nx.to_binary(final[0]) <>
-    #  Nx.to_binary(final[1]) <> Nx.to_binary(final[2]) <> Nx.to_binary(final[3])
+    m32b
+    |> md5_of
   end
 
   defn md5_disect(m32b) do
@@ -392,9 +373,6 @@ defmodule ShadowHash.Gpu.Md5core do
     final_c = final |> Nx.right_shift(16) |> Nx.bitwise_and(0xFF)
     final_d = final |> Nx.right_shift(24) |> Nx.bitwise_and(0xFF)
 
-    # a3a2a1a0 b3b2b1b0 c3c2c1c0 d3d2d1d0
-
-    # a3b3c3d3 a2b2c2d2 a1b1c1d1 a0b0c0d0
     Nx.concatenate([final_a, final_b, final_c, final_d])
     |> Nx.as_type({:u, 8})
     |> Nx.take(
@@ -417,8 +395,5 @@ defmodule ShadowHash.Gpu.Md5core do
         15
       ])
     )
-
-    # Nx.to_binary(final[0]) <>
-    #  Nx.to_binary(final[1]) <> Nx.to_binary(final[2]) <> Nx.to_binary(final[3])
   end
 end

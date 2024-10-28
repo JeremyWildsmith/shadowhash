@@ -70,7 +70,7 @@ defmodule ShadowHash.Job.BruteforceClient do
     end
   end
 
-  defp handle_generic_cpu(gpu_hashers, algo, target, %BruteforceJob{
+  defp handle_generic_cpu(_gpu_hashers, algo, target, %BruteforceJob{
          begin: start,
          last: last,
          charset: charset
@@ -104,24 +104,23 @@ defmodule ShadowHash.Job.BruteforceClient do
       |> Nx.tensor(type: {:u, 8})
 
     try do
-      match_index =
-        Map.get(gpu_hashers, :md5crypt).(
-          passwords,
-          salt,
-          needle
-        )
-        |> Nx.to_number()
-        |> IO.inspect()
-        |> case do
-          -1 -> nil
-          n -> {:ok, PasswordGraph.from_index(n + start, charset)}
-        end
+      Map.get(gpu_hashers, :md5crypt).(
+        passwords,
+        salt,
+        needle
+      )
+      |> Nx.to_number()
+      |> IO.inspect()
+      |> case do
+        -1 -> nil
+        n -> {:ok, PasswordGraph.from_index(n + start, charset)}
+      end
     rescue
       r -> r |> IO.inspect()
     end
   end
 
-  defp handle_job(gpu_hashers, algo, target, %DictionaryJob{names: names}) do
+  defp handle_job(_gpu_hashers, algo, target, %DictionaryJob{names: names}) do
     names
     |> crack(algo, target)
   end

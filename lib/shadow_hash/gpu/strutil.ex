@@ -4,7 +4,6 @@ defmodule ShadowHash.Gpu.Strutil do
 
   @max_str_size 150
   @max_message_size_bytes 64 * 4
-  @max_message_size_dword 64
 
   def create_set(names) when is_list(names) do
     names
@@ -441,12 +440,13 @@ defmodule ShadowHash.Gpu.Strutil do
       |> Nx.subtract(search)
       |> Nx.any()
 
-    r = Nx.subtract(1, w)
-    |> Nx.devectorize
-    |> Nx.multiply(2)
+    r =
+      Nx.subtract(1, w)
+      |> Nx.devectorize()
+      |> Nx.multiply(2)
 
     Nx.concatenate([Nx.tensor([1]), r])
-    |> Nx.argmax
+    |> Nx.argmax()
     |> Nx.subtract(1)
   end
 
@@ -564,19 +564,18 @@ defmodule ShadowHash.Gpu.Strutil do
   def test_findmd5() do
     compiled = Nx.Defn.jit(&md5crypt_find/3, compiler: EXLA)
 
-    passwords =
-      [
-        ~c"ab",
-        ~c"cd",
-        ~c"tp",
-        ~c"fg"
-      ]
-      |> create_set()
-      |> compiled.(
-        create(~c"cobKo5Ks"),
-        Nx.tensor([8, 56, 211, 120, 45, 179, 217, 228, 179, 252, 230, 245, 221, 171, 68, 113],
-          type: {:u, 8}
-        )
+    [
+      ~c"ab",
+      ~c"cd",
+      ~c"tp",
+      ~c"fg"
+    ]
+    |> create_set()
+    |> compiled.(
+      create(~c"cobKo5Ks"),
+      Nx.tensor([8, 56, 211, 120, 45, 179, 217, 228, 179, 252, 230, 245, 221, 171, 68, 113],
+        type: {:u, 8}
       )
+    )
   end
 end
