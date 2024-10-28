@@ -157,13 +157,9 @@ defmodule ShadowHash.Gpu.Strutil do
   defn concat(a, b) do
     a_len = a[0]
 
-    total_len =
-      a_len
-      |> Nx.add(b[0])
-
     b
     |> Nx.as_type({:u, 8})
-    |> shift_tensor_right_pin_head(a_len)
+    |> Nx.take(right_shift_vectors()[a_len])
     |> Nx.add(a)
   end
 
@@ -456,31 +452,35 @@ defmodule ShadowHash.Gpu.Strutil do
     |> compiled.(create(~c"cobKo5Ks"))
   end
 
+  def benchmark_do(compiled, data) do
+    data
+    |> compiled.(create(~c"cobKo5Ks"))
+  end
+
   def benchmark() do
     compiled = Nx.Defn.jit(&md5crypt/2, compiler: EXLA)
     #compiled = Nx.Defn.compile(&md5crypt/2, [Nx.template({150}, :u8), Nx.template({150}, :u8)], compiler: EXLA)
 
-    test_benchmark_passwords()
+    data = test_benchmark_passwords()
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
+    |> Enum.concat(test_benchmark_passwords())
     |> Enum.concat(test_benchmark_passwords())
     |> create_set()
+
+    data
     |> compiled.(create(~c"cobKo5Ks"))
 
     IO.puts("Warmup done...")
 
+    {time, r} = :timer.tc(__MODULE__, :benchmark_do, [compiled, data])
 
-    test_benchmark_passwords()
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> Enum.concat(test_benchmark_passwords())
-    |> create_set()
-    |> compiled.(create(~c"cobKo5Ks"))
-    IO.puts("done")
+    IO.puts(time / 1000_000)
   end
 end
