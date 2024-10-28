@@ -12,7 +12,7 @@ defmodule ShadowHash.Cli do
   def parse_args(argv),
     do:
       OptionParser.parse(argv,
-        strict: [shadow: :string, user: :string, all_chars: :boolean, non_worker: :boolean, verbose: :boolean, dictionary: :string]
+        strict: [shadow: :string, user: :string, all_chars: :boolean, non_worker: :boolean, verbose: :boolean, gpu: :boolean, dictionary: :string]
       )
       |> _parse_args
 
@@ -32,6 +32,7 @@ defmodule ShadowHash.Cli do
     |> Map.put_new(:non_worker, false)
     |> Map.put_new(:verbose, false)
     |> Map.put_new(:user, "*")
+    |> Map.put_new(:gpu, false)
   end
 
   defp _parse_args(_), do: :help

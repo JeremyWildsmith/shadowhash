@@ -26,12 +26,15 @@ defmodule ShadowHash.Shadow do
       " <shadow path> : The path to the linux shadow file containing hashed user passwords."
     )
 
-    IO.puts(" --user        : Supply a username, the passwords for which will be cracked.")
-    IO.puts("                 Otherwise, attempts to crack all passwords in the shadow file.")
-    IO.puts(" --all-chars   : Will also bruteforce with non-printable characters")
-    IO.puts(" --dictionary  : Supply a dictionary of passwords that are attempted initially")
-    IO.puts(" --non-worker  : Do not spin up workers to process bruteforce requests")
-    IO.puts(" --verbose     : Print verbose logging")
+    IO.puts(" --user         : Supply a username, the passwords for which will be cracked.")
+    IO.puts("                  Otherwise, attempts to crack all passwords in the shadow file.")
+    IO.puts(" --all-chars    : Will also bruteforce with non-printable characters")
+    IO.puts(" --dictionary   : Supply a dictionary of passwords that are attempted initially")
+    IO.puts(" --gpu          : Supported for md5crypt, will execute the hash algorithm")
+    IO.puts("                  on the GPU. There is initial overhead to JIT compile to CUDA")
+    IO.puts("                  but after JIT compiling, significantly faster.")
+    IO.puts(" --non-worker   : Do not spin up workers to process bruteforce requests")
+    IO.puts(" --verbose      : Print verbose logging")
   end
 
   def process(%{
@@ -40,7 +43,8 @@ defmodule ShadowHash.Shadow do
         dictionary: dictionary,
         all_chars: all_chars,
         non_worker: non_worker,
-        verbose: verbose
+        verbose: verbose,
+        gpu: gpu_acceleration
       }) do
 
     unless verbose do
@@ -54,11 +58,17 @@ defmodule ShadowHash.Shadow do
       unless non_worker do
         # :erlang.system_info(:logical_processors_available)
         1..:erlang.system_info(:logical_processors_available)
-        |> Enum.map(fn _ -> BruteforceClient.start_link end)
+        |> Enum.map(fn _ -> BruteforceClient.start_link(gpu_acceleration) end)
       else
         IO.puts("!!! WARNING: Started as non-worker. No workers on this node will be spawned to process bruteforce jobs.")
         []
       end
+
+    if gpu_acceleration do
+      IO.puts("*** GPU Acceleration is enabled.")
+    else
+      IO.puts("!!! GPU Acceleration is disabled.")
+    end
 
     process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
 

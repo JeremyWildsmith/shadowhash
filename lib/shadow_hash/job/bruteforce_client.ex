@@ -10,12 +10,17 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.Gpu.Strutil
   alias ShadowHash.Gpu.Md5
 
-  def start_link() do
+  def start_link(gpu_acceleration) do
     Logger.info("* Bruteforce Client Starting")
 
-    gpu_hashers = %{
-      md5crypt: Nx.Defn.jit(&Strutil.md5crypt_find/3, compiler: EXLA)
-    }
+    gpu_hashers =
+      if gpu_acceleration do
+        %{
+          md5crypt: Nx.Defn.jit(&Strutil.md5crypt_find/3, compiler: EXLA)
+        }
+      else
+        %{}
+      end
 
     spawn(__MODULE__, :process, [gpu_hashers])
 
@@ -126,18 +131,23 @@ defmodule ShadowHash.Job.BruteforceClient do
       "MD5crypt is supported by a GPU accelerated hasher. Attempting to acquire GPU lock"
     )
 
-    :sleeplocks.attempt(:gpu_lock)
-    |> case do
-      :ok ->
-        Logger.info("Lock acquired. Applying GPU accelerated hashing")
-        r = handle_md5crypt_gpu(gpu_hashers, algo, target, job)
-        Logger.info("Releasing lock")
-        :sleeplocks.release(:gpu_lock)
-        r
+    unless Map.has_key?(gpu_hashers, :md5crypt) do
+      Logger.info("No md5crypt GPU hasher loaded. Falling back to CPU hasher.")
+      handle_generic_cpu(gpu_hashers, algo, target, job)
+    else
+      :sleeplocks.attempt(:gpu_lock)
+      |> case do
+        :ok ->
+          Logger.info("Lock acquired. Applying GPU accelerated hashing")
+          r = handle_md5crypt_gpu(gpu_hashers, algo, target, job)
+          Logger.info("Releasing lock")
+          :sleeplocks.release(:gpu_lock)
+          r
 
-      _ ->
-        Logger.info("GPU is in use. Falling back to CPU bound")
-        handle_generic_cpu(gpu_hashers, algo, target, job)
+        _ ->
+          Logger.info("GPU is in use. Falling back to CPU bound")
+          handle_generic_cpu(gpu_hashers, algo, target, job)
+      end
     end
   end
 
