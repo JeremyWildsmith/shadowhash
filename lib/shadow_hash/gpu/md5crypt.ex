@@ -8,7 +8,6 @@ defmodule ShadowHash.Gpu.Md5crypt do
   def create_set(names) when is_list(names) do
     names
     |> Enum.map(fn n ->
-      # zero_tensor()
       l = length(n)
       padding = @max_str_size - l - 1
 
