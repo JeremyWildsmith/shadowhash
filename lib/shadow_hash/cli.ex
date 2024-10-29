@@ -14,6 +14,7 @@ defmodule ShadowHash.Cli do
       |> Enum.map(fn e -> e |> String.replace("–", "-") end) #In-case pasting from document.
       |> OptionParser.parse(
         strict: [
+          password: :string,
           user: :string,
           all_chars: :boolean,
           workers: :integer,
@@ -27,6 +28,10 @@ defmodule ShadowHash.Cli do
 
   defp _parse_args({[], [shadow], []}),
     do: _parse_args({%{}, [shadow], []})
+
+  defp _parse_args({[{:password, _} | _] = opt, [], []}) do
+    _parse_args({opt, [nil], []})
+  end
 
   defp _parse_args({optional, [shadow], []}) do
     cfg = %{shadow: shadow}
@@ -43,6 +48,7 @@ defmodule ShadowHash.Cli do
     |> Map.put_new(:user, "*")
     |> Map.put_new(:gpu, false)
     |> Map.put_new(:gpu_warmup, false)
+    |> Map.put_new(:password, nil)
   end
 
   defp _parse_args(_args) do

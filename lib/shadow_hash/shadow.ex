@@ -19,9 +19,7 @@ defmodule ShadowHash.Shadow do
   def process(:help) do
     IO.puts("Shadow file parser and password cracker.")
 
-    IO.puts(
-      "Usage is: shadow_hash <shadow_path> [--user <username>]"
-    )
+    IO.puts("Usage is: shadow_hash <shadow_path> [--user <username>]")
 
     IO.puts(
       " <shadow_path> : The path to the linux shadow file containing hashed user passwords."
@@ -41,7 +39,11 @@ defmodule ShadowHash.Shadow do
     IO.puts(" --gpu-warmup    : Warm-up GPU bruteforce algorithm. Useful when capturing")
     IO.puts("                   timing metrics and you don't want to include start-up overhead")
     IO.puts(" --workers <num> : Number of workers to process bruteforce requests. Defaults")
-    IO.puts("                   to number of available CPU cores. Be mindful of the memory constraint ")
+
+    IO.puts(
+      "                   to number of available CPU cores. Be mindful of the memory constraint "
+    )
+
     IO.puts("                   of GPU if using GPU acceleration")
     IO.puts(" --verbose       : Print verbose logging")
   end
@@ -54,7 +56,8 @@ defmodule ShadowHash.Shadow do
         workers: num_workers,
         verbose: verbose,
         gpu: gpu_acceleration,
-        gpu_warmup: gpu_warmup
+        gpu_warmup: gpu_warmup,
+        password: password
       }) do
     unless verbose do
       Logger.configure(level: :none)
@@ -87,7 +90,8 @@ defmodule ShadowHash.Shadow do
 
     IO.puts(" *** Using #{num_workers} worker processes ")
 
-    process_file(user, File.read(shadow), dictionary, resolve_charset(all_chars))
+    load_passwords(user, shadow, password)
+    |> process_passwords(dictionary, resolve_charset(all_chars))
 
     for {:ok, w} <- workers, do: BruteforceClient.shutdown(w)
   end
@@ -131,29 +135,37 @@ defmodule ShadowHash.Shadow do
     end
   end
 
-  def process_file(user, {:ok, contents}, dictionary, charset) do
-    pwd = ShadowParse.extract_passwords(contents, user)
+  defp load_passwords(user, shadow, password) do
+    pwd =
+      unless is_nil(shadow) do
+        case File.read(shadow) do
+          {:ok, r} -> ShadowParse.extract_passwords(r, user)
+          _ ->
+            IO.puts("Error reading from shadow file. It may not exist. No passwords will be collected from shadow file.")
+            []
+        end
+      else
+        []
+      end
 
-    if pwd == [] do
-      IO.puts(
-        "No user matching the search criteria #{user} was found. No attacks will be performed."
-      )
+    unless is_nil(password) do
+      pwd ++ [{"command_line_entry", password}]
     else
-      IO.puts(
-        " *** Bruteforce will be performed on the following users"
-      )
+      pwd
+    end
+  end
+
+  def process_passwords(pwd, dictionary, charset) do
+    if pwd == [] do
+      IO.puts("No user matching the search criteria was found. No attacks will be performed.")
+    else
+      IO.puts(" *** Bruteforce will be performed on the following users")
 
       pwd |> Enum.each(fn {u, _} -> IO.puts("     - #{u}") end)
 
       IO.puts("\nStarting attack...")
       for {u, p} <- pwd, do: process_file_entry(u, p, dictionary, charset)
     end
-  end
-
-  def process_file(_, {_status, _r}, _, _) do
-    IO.puts(
-      "Error, unable to open the shadow file. It may not exist or you do not have permission to access the file."
-    )
   end
 
   def process_file_entry(user, pwd, dictionary, charset) do
@@ -172,9 +184,7 @@ defmodule ShadowHash.Shadow do
         IO.puts("Password not found for user #{user} in #{elapsed} seconds")
 
       plaintext ->
-        IO.puts(
-          "Password cracked for #{user} in #{elapsed} seconds. Plaintext: \"#{plaintext}\""
-        )
+        IO.puts("Password cracked for #{user} in #{elapsed} seconds. Plaintext: \"#{plaintext}\"")
     end
   end
 

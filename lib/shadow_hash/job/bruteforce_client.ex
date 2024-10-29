@@ -7,12 +7,13 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.Job.BruteforceJob
   alias ShadowHash.PasswordGraph
   alias ShadowHash.Hash
-  alias ShadowHash.Gpu.Md5crypt
   alias ShadowHash.Gpu.Strutil
   alias ShadowHash.ShadowBase64
 
   def start_link(gpu_hashers) do
     Logger.info("* Bruteforce Client Starting")
+
+    :sleeplocks.new(1, name: :gpu_lock)
 
     spawn(__MODULE__, :process, [gpu_hashers])
   end
@@ -75,7 +76,6 @@ defmodule ShadowHash.Job.BruteforceClient do
          last: last,
          charset: charset
        }) do
-
     salt =
       config
       |> :binary.bin_to_list()
@@ -98,6 +98,7 @@ defmodule ShadowHash.Job.BruteforceClient do
     Logger.info("Lock acquired. Applying GPU accelerated hashing")
 
     try do
+      :sleeplocks.acquire(:gpu_lock)
       Map.get(gpu_hashers, :md5crypt).(
         passwords,
         salt,
@@ -114,6 +115,7 @@ defmodule ShadowHash.Job.BruteforceClient do
         r |> IO.inspect()
     after
       Logger.info("Releasing GPU lock")
+      :sleeplocks.release(:gpu_lock)
     end
   end
 

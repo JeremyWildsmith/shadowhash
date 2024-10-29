@@ -36,7 +36,7 @@ defmodule ShadowHash.Job.JobScheduler do
         Logger.info("Received a job. Processing the job.")
 
         with {:ok, plaintext} <- handler.(algo, target, job),
-             do: send(scheduler, {:ok, plaintext})
+             do: send(scheduler, {:ok, target, plaintext})
 
         Logger.info("Done assigned job.")
         process(scheduler, handler)
@@ -65,11 +65,21 @@ defmodule ShadowHash.Job.JobScheduler do
       {:ready, sender} ->
         Logger.info("Receieved ready, dispatching a job.")
 
-        jobs
-        |> dispatch_worker(algo, target, sender)
-        |> schedule(algo, target, MapSet.put(workers, sender))
+        next_jobs =
+          jobs
+          |> dispatch_worker(algo, target, sender)
 
-      {:ok, plain} ->
+        next_workers =
+          if next_jobs == [] do
+            MapSet.put(workers, sender)
+          else
+            MapSet.delete(workers, sender)
+          end
+
+        jobs
+        |> schedule(algo, target, next_workers)
+
+      {:ok, ciphertext, plain} when ciphertext == target ->
         Logger.info("Plaintext found: #{plain}. shutting down scheduler.")
         for w <- workers, do: send(w, {:terminate})
         {:ok, plain}
