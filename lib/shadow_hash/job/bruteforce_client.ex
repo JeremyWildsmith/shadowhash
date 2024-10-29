@@ -66,6 +66,7 @@ defmodule ShadowHash.Job.BruteforceClient do
          last: last,
          charset: charset
        }) do
+
     start..last
     |> Stream.map(&PasswordGraph.from_index(&1, charset))
     |> crack(algo, target)
@@ -125,10 +126,6 @@ defmodule ShadowHash.Job.BruteforceClient do
   end
 
   defp handle_job(gpu_hashers, algo = %{method: :md5crypt}, target, %BruteforceJob{} = job) do
-    Logger.info(
-      "MD5crypt is supported by a GPU accelerated hasher. Attempting to acquire GPU lock"
-    )
-
     unless Map.has_key?(gpu_hashers, :md5crypt) do
       Logger.info("No md5crypt GPU hasher loaded. Falling back to CPU hasher.")
       handle_generic_cpu(gpu_hashers, algo, target, job)

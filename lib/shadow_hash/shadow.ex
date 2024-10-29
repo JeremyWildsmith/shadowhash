@@ -90,15 +90,20 @@ defmodule ShadowHash.Shadow do
 
     IO.puts(" *** Using #{num_workers} worker processes ")
 
+    gpu_accelerated_hashers =
+      gpu_hashers
+      |> Map.keys()
+      |> MapSet.new()
+
     load_passwords(user, shadow, password)
-    |> process_passwords(dictionary, resolve_charset(all_chars))
+    |> process_passwords(gpu_accelerated_hashers, dictionary, resolve_charset(all_chars))
 
     for {:ok, w} <- workers, do: BruteforceClient.shutdown(w)
   end
 
   defp warmup_gpu(gpu_hasher) do
     passwords =
-      Stream.duplicate(~c"wu", JobScheduler.chunk_size(%{method: :md5crypt}))
+      Stream.duplicate(~c"wu", chunk_size(:md5crypt, true))
       |> Enum.to_list()
       |> Strutil.create_set()
 
@@ -155,7 +160,7 @@ defmodule ShadowHash.Shadow do
     end
   end
 
-  def process_passwords(pwd, dictionary, charset) do
+  def process_passwords(pwd, gpu_accelerated_algorithms, dictionary, charset) do
     if pwd == [] do
       IO.puts("No user matching the search criteria was found. No attacks will be performed.")
     else
@@ -164,18 +169,33 @@ defmodule ShadowHash.Shadow do
       pwd |> Enum.each(fn {u, _} -> IO.puts("     - #{u}") end)
 
       IO.puts("\nStarting attack...")
-      for {u, p} <- pwd, do: process_file_entry(u, p, dictionary, charset)
+      for {u, p} <- pwd, do: process_file_entry(gpu_accelerated_algorithms, u, p, dictionary, charset)
     end
   end
 
-  def process_file_entry(user, pwd, dictionary, charset) do
+  def chunk_size(:md5crypt, gpu_accelerated) do
+    if gpu_accelerated do
+      11000
+    else
+      500
+    end
+  end
+
+  def chunk_size(_algo, _gpu_accelerated) do
+    500
+  end
+
+  def process_file_entry(gpu_accelerated_algorithms, user, pwd, dictionary, charset) do
     IO.puts("Attempting to recover password for user #{user}")
     %{hash: hash, algo: algo} = PasswordParse.parse(pwd)
+    %{method: method} = algo
 
     IO.puts(" - Detected password type: #{Atom.to_string(algo.method)}")
     IO.puts(" - Detected password hash: #{hash}")
 
-    {elapsed, password} = :timer.tc(__MODULE__, :crack, [algo, hash, dictionary, charset])
+    chunk = chunk_size(method, MapSet.member?(gpu_accelerated_algorithms, method))
+
+    {elapsed, password} = :timer.tc(__MODULE__, :crack, [algo, hash, chunk, dictionary, charset])
 
     elapsed = elapsed / 1_000_000
 
@@ -188,7 +208,7 @@ defmodule ShadowHash.Shadow do
     end
   end
 
-  def crack(algo, hash, dictionary, charset) do
+  def crack(algo, hash, chunk_size, dictionary, charset) do
     Logger.info("Submitting bruteforce job to job server.")
     BruteforceJobServer.submit_job(self())
 
@@ -198,22 +218,12 @@ defmodule ShadowHash.Shadow do
     ]
 
     Logger.info("Starting job scheduler...")
-    {:ok, plaintext} = JobScheduler.schedule(jobs, algo, hash)
+    {:ok, plaintext} = JobScheduler.schedule(jobs, algo, hash, chunk_size)
 
     Logger.info("Dismissing bruteforce job from job server.")
     BruteforceJobServer.dismiss_job(self())
 
     plaintext
-  end
-
-  def crack_old(algo, hash, dictionary, charset) do
-    dictionary(dictionary)
-    |> Stream.concat(bruteforce(charset))
-    |> Stream.map(&{Hash.generate(algo, &1), &1})
-    |> Stream.filter(fn {cipher, _} -> cipher === hash end)
-    |> Stream.map(fn {_, plain} -> plain end)
-    |> Enum.take(1)
-    |> List.first()
   end
 
   defp _dictionary_entry_trim_newline(line) do

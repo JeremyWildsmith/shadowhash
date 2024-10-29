@@ -5,17 +5,9 @@ defmodule ShadowHash.Job.JobScheduler do
 
   @ready_idle_timeout 5000
 
-  def chunk_size(%{method: :md5crypt}) do
-    11000
-  end
-
-  def chunk_size(_) do
-    500
-  end
-
-  defp dispatch_worker(jobs, algo, target, worker_pid) do
+  defp dispatch_worker(jobs, algo, target, worker_pid, chunk_size) do
     jobs
-    |> JobParser.take_job(chunk_size(algo))
+    |> JobParser.take_job(chunk_size)
     |> case do
       {current, next} ->
         send(worker_pid, {:work, algo, target, current})
@@ -52,22 +44,22 @@ defmodule ShadowHash.Job.JobScheduler do
     end
   end
 
-  def schedule(jobs, algo, target) do
-    schedule(jobs, algo, target, MapSet.new())
+  def schedule(jobs, algo, target, chunk_size) do
+    schedule(jobs, algo, target, chunk_size, MapSet.new())
   end
 
-  defp schedule([], _algo, _target, workers) when map_size(workers) == 0 do
+  defp schedule([], _algo, _target, _chunk_size, workers) when map_size(workers) == 0 do
     :terminate
   end
 
-  defp schedule(jobs, algo, target, workers) do
+  defp schedule(jobs, algo, target, chunk_size, workers) do
     receive do
       {:ready, sender} ->
         Logger.info("Receieved ready, dispatching a job.")
 
         next_jobs =
           jobs
-          |> dispatch_worker(algo, target, sender)
+          |> dispatch_worker(algo, target, sender, chunk_size)
 
         next_workers =
           if next_jobs == [] do
@@ -76,8 +68,8 @@ defmodule ShadowHash.Job.JobScheduler do
             MapSet.delete(workers, sender)
           end
 
-        jobs
-        |> schedule(algo, target, next_workers)
+        next_jobs
+        |> schedule(algo, target, chunk_size, next_workers)
 
       {:ok, ciphertext, plain} when ciphertext == target ->
         Logger.info("Plaintext found: #{plain}. shutting down scheduler.")
@@ -86,7 +78,9 @@ defmodule ShadowHash.Job.JobScheduler do
 
       {:shutdown, sender} ->
         Logger.info("Scheduler receieved shutdown.")
-        schedule([], algo, target, MapSet.delete(workers, sender))
+
+        []
+        |> schedule(algo, target, chunk_size, MapSet.delete(workers, sender))
     end
   end
 end
