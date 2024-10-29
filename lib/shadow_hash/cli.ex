@@ -10,9 +10,10 @@ defmodule ShadowHash.Cli do
 
   def parse_args(argv),
     do:
-      OptionParser.parse(argv,
+      argv
+      |> Enum.map(fn e -> e |> String.replace("–", "-") end) #In-case pasting from document.
+      |> OptionParser.parse(
         strict: [
-          shadow: :string,
           user: :string,
           all_chars: :boolean,
           workers: :integer,
@@ -25,14 +26,7 @@ defmodule ShadowHash.Cli do
       |> _parse_args
 
   defp _parse_args({[], [shadow], []}),
-    do: %{
-      shadow: shadow,
-      user: "*",
-      dictionary: nil,
-      all_chars: false,
-      non_worker: false,
-      verbose: false
-    }
+    do: _parse_args({%{}, [shadow], []})
 
   defp _parse_args({optional, [shadow], []}) do
     cfg = %{shadow: shadow}
@@ -51,5 +45,7 @@ defmodule ShadowHash.Cli do
     |> Map.put_new(:gpu_warmup, false)
   end
 
-  defp _parse_args(_), do: :help
+  defp _parse_args(_args) do
+    :help
+  end
 end

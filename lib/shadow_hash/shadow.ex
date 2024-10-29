@@ -19,11 +19,11 @@ defmodule ShadowHash.Shadow do
     IO.puts("Shadow file parser and password cracker.")
 
     IO.puts(
-      "Usage is: shadow_hash <shadow_file_path> [--user <username>] [--all-chars] [--dictionary <dictionary path>]"
+      "Usage is: shadow_hash <shadow_path> [--user <username>]"
     )
 
     IO.puts(
-      " <shadow path> : The path to the linux shadow file containing hashed user passwords."
+      " <shadow_path> : The path to the linux shadow file containing hashed user passwords."
     )
 
     IO.puts(" --user <user>  : Supply a username, the passwords for which will be cracked.")
@@ -34,15 +34,15 @@ defmodule ShadowHash.Shadow do
       " --dictionary <dictionary>  : Supply a dictionary of passwords that are attempted initially"
     )
 
-    IO.puts(" --gpu          : Supported for md5crypt, will execute the hash algorithm")
-    IO.puts("                  on the GPU. There is initial overhead to JIT compile to CUDA")
-    IO.puts("                  but after JIT compiling, significantly faster.")
-    IO.puts(" --gpu-warmup   : Warm-up GPU bruteforce algorithm. Useful when capturing")
-    IO.puts("                  timing metrics and you don't want to include start-up overhead")
-    IO.puts(" --workers      : Number of workers to process bruteforce requests. Defaults")
-    IO.puts("                  to number of available CPU cores. Be mindful of the memory constraint ")
-    IO.puts("                  of GPU if using GPU acceleration")
-    IO.puts(" --verbose      : Print verbose logging")
+    IO.puts(" --gpu           : Supported for md5crypt, will execute the hash algorithm")
+    IO.puts("                   on the GPU. There is initial overhead to JIT compile to CUDA")
+    IO.puts("                   but after JIT compiling, significantly faster.")
+    IO.puts(" --gpu-warmup    : Warm-up GPU bruteforce algorithm. Useful when capturing")
+    IO.puts("                   timing metrics and you don't want to include start-up overhead")
+    IO.puts(" --workers <num> : Number of workers to process bruteforce requests. Defaults")
+    IO.puts("                   to number of available CPU cores. Be mindful of the memory constraint ")
+    IO.puts("                   of GPU if using GPU acceleration")
+    IO.puts(" --verbose       : Print verbose logging")
   end
 
   def process(%{
