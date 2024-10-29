@@ -1,9 +1,20 @@
 defmodule ShadowHash.Gpu.Constants do
   import Nx.Defn
-  @max_str_size 150
+
+  defmacro max_str_size do
+    quote do
+      150
+    end
+  end
+
+  defmacro max_message_size_bytes do
+    quote do
+      256 # 64 * 4
+    end
+  end
 
   defn counter() do
-    Nx.iota({@max_str_size})
+    Nx.iota({max_str_size()})
   end
 
   defn right_shift_vectors() do

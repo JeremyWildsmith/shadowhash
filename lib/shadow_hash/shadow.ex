@@ -220,7 +220,7 @@ defmodule ShadowHash.Shadow do
   end
 
   def dictionary(nil) do
-    IO.puts(" - No dictonary file was supplied. Skipping dictionary attack.")
+    IO.puts(" - No dictionary file was supplied. Skipping dictionary attack.")
     []
   end
 

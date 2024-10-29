@@ -1,5 +1,6 @@
 defmodule ShadowHash.Gpu.Md5 do
   import Nx.Defn
+  import ShadowHash.Gpu.Constants
 
   @shift_per_round Nx.tensor(
                      [
@@ -392,5 +393,82 @@ defmodule ShadowHash.Gpu.Md5 do
         15
       ])
     )
+  end
+
+  defn unwrap_string_to_message(s) do
+    Nx.slice(s, [1], [max_str_size() - 1])
+    |> Nx.pad(0, [{0, max_message_size_bytes() - max_str_size() + 1, 0}])
+  end
+
+  defn pack_as_dwords(message) do
+    shifted_message =
+      message
+      |> Nx.as_type({:u, 32})
+      |> Nx.multiply(message_aggregate_shift_pattern())
+
+    l0 = Nx.slice(Nx.tensor(shifted_message), [0], [max_message_size_bytes()], strides: [4])
+    l1 = Nx.slice(Nx.tensor(shifted_message), [1], [max_message_size_bytes() - 1], strides: [4])
+    l2 = Nx.slice(Nx.tensor(shifted_message), [2], [max_message_size_bytes() - 2], strides: [4])
+    l3 = Nx.slice(Nx.tensor(shifted_message), [3], [max_message_size_bytes() - 3], strides: [4])
+
+    l0
+    |> Nx.add(l1)
+    |> Nx.add(l2)
+    |> Nx.add(l3)
+    |> Nx.as_type({:u, 32})
+  end
+
+  defn build_m32b(digest) do
+    str_len = digest[0] |> Nx.as_type({:u, 32})
+
+    pad_amount =
+      Nx.tensor([56])
+      |> Nx.subtract(Nx.remainder(Nx.add(str_len, 1), 64))
+      |> Nx.add(64)
+      |> Nx.remainder(64)
+
+    total_effective_len =
+      str_len
+      |> Nx.add(pad_amount)
+      |> Nx.add(1 + 8)
+      |> Nx.divide(4)
+      |> Nx.as_type({:u, 32})
+
+    original_length_bits = Nx.multiply(str_len, 8)
+
+    shift_amount = str_len |> Nx.add(pad_amount) |> Nx.add(1) |> Nx.remainder(256)
+
+    length_little_endian =
+      Nx.broadcast(original_length_bits, {4})
+      |> Nx.divide(Nx.tensor([1, 256, 65536, 16_777_216]))
+      |> Nx.as_type({:u, 8})
+      |> Nx.pad(0, [{0, max_message_size_bytes() - 4, 0}])
+      |> Nx.take(shift_right_message_64()[shift_amount])
+      |> Nx.squeeze()
+
+    [padding, _] = Nx.broadcast_vectors([message_m32b_padding(), digest])
+
+    shift_amount = str_len |> Nx.remainder(256)
+
+    encoded =
+      padding
+      |> Nx.take(shift_right_message_64()[shift_amount])
+      |> Nx.squeeze()
+      |> Nx.add(length_little_endian)
+      |> Nx.add(unwrap_string_to_message(digest))
+      |> pack_as_dwords()
+
+    Nx.concatenate([total_effective_len, encoded])
+  end
+
+  defn calc_md5_as_string(m32b) do
+    m32b
+    |> md5_disect()
+    |> Nx.pad(0, [{1, max_str_size() - 16 - 1, 0}])
+    |> Nx.indexed_put(
+      Nx.tensor([0]),
+      16
+    )
+    |> Nx.as_type({:u, 8})
   end
 end
