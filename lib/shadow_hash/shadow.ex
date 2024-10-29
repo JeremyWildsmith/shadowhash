@@ -11,6 +11,7 @@ defmodule ShadowHash.Shadow do
   alias ShadowHash.Job.BruteforceJob
   alias ShadowHash.Job.BruteforceClient
   alias ShadowHash.Gpu.Md5crypt
+  alias ShadowHash.Gpu.Strutil
 
   defp resolve_charset(false), do: PasswordGraph.printable_mapping()
   defp resolve_charset(true), do: PasswordGraph.all_mapping()
@@ -95,7 +96,7 @@ defmodule ShadowHash.Shadow do
     passwords =
       Stream.duplicate(~c"wu", JobScheduler.chunk_size(%{method: :md5crypt}))
       |> Enum.to_list()
-      |> Md5crypt.create_set()
+      |> Strutil.create_set()
 
     needle =
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -103,7 +104,7 @@ defmodule ShadowHash.Shadow do
 
     salt =
       ~c"01234567"
-      |> Md5crypt.create()
+      |> Strutil.create()
 
     gpu_hasher.(
       passwords,

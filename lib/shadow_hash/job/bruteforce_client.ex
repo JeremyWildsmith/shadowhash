@@ -8,6 +8,7 @@ defmodule ShadowHash.Job.BruteforceClient do
   alias ShadowHash.PasswordGraph
   alias ShadowHash.Hash
   alias ShadowHash.Gpu.Md5crypt
+  alias ShadowHash.Gpu.Strutil
   alias ShadowHash.ShadowBase64
 
   def start_link(gpu_hashers) do
@@ -79,13 +80,13 @@ defmodule ShadowHash.Job.BruteforceClient do
       config
       |> :binary.bin_to_list()
       |> Enum.drop(3)
-      |> Md5crypt.create()
+      |> Strutil.create()
 
     passwords =
       start..last
       |> Stream.map(&(PasswordGraph.from_index(&1, charset) |> :binary.bin_to_list()))
       |> Enum.to_list()
-      |> Md5crypt.create_set()
+      |> Strutil.create_set()
 
     needle =
       target
