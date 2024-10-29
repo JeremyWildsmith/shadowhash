@@ -172,7 +172,7 @@ defmodule ShadowHash.Shadow do
 
       plaintext ->
         IO.puts(
-          "Password cracked for user #{user} in #{elapsed} seconds. Plaintext: \"#{plaintext}\""
+          "Password cracked for #{user} in #{elapsed} seconds. Plaintext: \"#{plaintext}\""
         )
     end
   end
