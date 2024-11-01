@@ -80,4 +80,5 @@ In a multi-node configuration, `shadow_hash` will distribute the password cracki
 
 For generating benchmark metrics, please refer to the `benchmark.sh` shell script.
 
-![alt text](/docs/output.png)
+Below is a sample benchmark file produced by `benchmark.sh` which benchmarks the hashing performance accross all supported algorithms for different thread counts.
+![benchmark stats for 2 character password](/docs/output.png)
