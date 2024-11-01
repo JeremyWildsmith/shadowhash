@@ -1,6 +1,5 @@
 defmodule ShadowHash.Shadow do
   require Logger
-  alias ShadowHash.Hash
   alias ShadowHash.PasswordParse
   alias ShadowHash.ShadowParse
   alias ShadowHash.PasswordGraph
@@ -144,9 +143,14 @@ defmodule ShadowHash.Shadow do
     pwd =
       unless is_nil(shadow) do
         case File.read(shadow) do
-          {:ok, r} -> ShadowParse.extract_passwords(r, user)
+          {:ok, r} ->
+            ShadowParse.extract_passwords(r, user)
+
           _ ->
-            IO.puts("Error reading from shadow file. It may not exist. No passwords will be collected from shadow file.")
+            IO.puts(
+              "Error reading from shadow file. It may not exist. No passwords will be collected from shadow file."
+            )
+
             []
         end
       else
@@ -169,7 +173,9 @@ defmodule ShadowHash.Shadow do
       pwd |> Enum.each(fn {u, _} -> IO.puts("     - #{u}") end)
 
       IO.puts("\nStarting attack...")
-      for {u, p} <- pwd, do: process_file_entry(gpu_accelerated_algorithms, u, p, dictionary, charset)
+
+      for {u, p} <- pwd,
+          do: process_password_entry(gpu_accelerated_algorithms, u, p, dictionary, charset)
     end
   end
 
@@ -185,7 +191,38 @@ defmodule ShadowHash.Shadow do
     500
   end
 
-  def process_file_entry(gpu_accelerated_algorithms, user, pwd, dictionary, charset) do
+  defp _dictionary_entry_trim_newline(line) do
+    if String.ends_with?(line, "\r\n") do
+      {trimmed, _} = String.split_at(line, String.length(line) - 1)
+      trimmed
+    else
+      if(String.ends_with?(line, "\n")) do
+        {trimmed, _} = String.split_at(line, String.length(line))
+        trimmed
+      else
+        line
+      end
+    end
+  end
+
+  defp dictionary(nil) do
+    IO.puts(" - No dictionary file was supplied. Skipping dictionary attack.")
+    []
+  end
+
+  defp dictionary(dictionary) do
+    IO.puts(" - Dictionary provided: #{dictionary}.")
+
+    if File.exists?(dictionary) do
+      File.stream!(dictionary, :line)
+      |> Stream.map(&_dictionary_entry_trim_newline/1)
+    else
+      IO.puts(" ! Unable to open dictionary file. It may not exist. Skipping")
+      []
+    end
+  end
+
+  def process_password_entry(gpu_accelerated_algorithms, user, pwd, dictionary, charset) do
     IO.puts("Attempting to recover password for user #{user}")
     %{hash: hash, algo: algo} = PasswordParse.parse(pwd)
     %{method: method} = algo
@@ -224,41 +261,5 @@ defmodule ShadowHash.Shadow do
     BruteforceJobServer.dismiss_job(self())
 
     plaintext
-  end
-
-  defp _dictionary_entry_trim_newline(line) do
-    if String.ends_with?(line, "\r\n") do
-      {trimmed, _} = String.split_at(line, String.length(line) - 1)
-      trimmed
-    else
-      if(String.ends_with?(line, "\n")) do
-        {trimmed, _} = String.split_at(line, String.length(line))
-        trimmed
-      else
-        line
-      end
-    end
-  end
-
-  def dictionary(nil) do
-    IO.puts(" - No dictionary file was supplied. Skipping dictionary attack.")
-    []
-  end
-
-  def dictionary(dictionary) do
-    IO.puts(" - Dictionary provided: #{dictionary}.")
-
-    if File.exists?(dictionary) do
-      File.stream!(dictionary, :line)
-      |> Stream.map(&_dictionary_entry_trim_newline/1)
-    else
-      IO.puts(" ! Unable to open dictionary file. It may not exist. Skipping")
-      []
-    end
-  end
-
-  def bruteforce(charset) do
-    Stream.iterate(0, &(&1 + 1))
-    |> Stream.map(&PasswordGraph.from_index(&1, charset))
   end
 end
